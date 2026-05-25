@@ -1,0 +1,530 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Theme palettes ──────────────────────────────────────────────────────── */
+
+/* Default (dark) */
+:root {
+  --bg: #1a1a1a;
+  --bg-surface: #212121;
+  --bg-hover: #2e2e2e;
+  --accent: #f5a623;
+  --accent-break: #4caf8d;
+  --accent-shadow: rgba(245, 166, 35, 0.35);
+  --accent-break-shadow: rgba(76, 175, 141, 0.35);
+  --on-accent: #1a1a1a;
+  --text: #f0ede8;
+  --text-muted: #777;
+  --border: #303030;
+  --transition: 0.5s ease;
+}
+
+/* Light */
+:root[data-theme="light"] {
+  --bg: #f5eedc;
+  --bg-surface: #efe7d1;
+  --bg-hover: #e5dcbe;
+  --accent: #9bb39a;          /* sage green — work */
+  --accent-break: #d9a961;    /* warm tan — break */
+  --accent-shadow: rgba(155, 179, 154, 0.35);
+  --accent-break-shadow: rgba(217, 169, 97, 0.35);
+  --on-accent: #2d2620;
+  --text: #2d2620;
+  --text-muted: #8a7e6a;
+  --border: #d8cdb0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  /* Transparent so the .app's border-radius shows rounded corners
+     against the OS desktop instead of square window bounds. */
+  background: transparent;
+}
+
+body {
+  color: var(--text);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+/* ── App shell ──────────────────────────────────────────────────────────── */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: var(--bg);
+  position: relative;
+  overflow: hidden;
+  /* Rounded corners — visible because the window is transparent */
+  border-radius: 14px;
+}
+
+/* ── Titlebar ────────────────────────────────────────────────────────────── */
+
+.titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 38px;
+  padding: 0 6px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  cursor: grab;
+  flex-shrink: 0;
+}
+
+.titlebar:active { cursor: grabbing; }
+
+.app-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.titlebar-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.18s, background 0.18s;
+  padding: 0;
+  line-height: 0;
+  flex-shrink: 0;
+}
+
+.titlebar-btn:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.titlebar-btn-close:hover {
+  color: #ff5f57;
+  background: rgba(255, 95, 87, 0.15);
+}
+
+/* ── Main content ────────────────────────────────────────────────────────── */
+
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(10px, 3%, 20px);
+  padding: 8px 0 clamp(16px, 5%, 28px);
+  min-height: 0;
+}
+
+/* ── Timer ring (fully inside SVG for scaling) ───────────────────────────── */
+
+.timer-display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 0 clamp(12px, 8%, 40px);
+  flex: 1;
+  min-height: 0;
+}
+
+/* SVG scales with container width; aspect ratio maintained via viewBox */
+.timer-svg {
+  width: 100%;
+  height: auto;
+  max-width: 280px;
+  overflow: visible;
+}
+
+.timer-ring-track {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 8;
+}
+
+/* ── Session dots ────────────────────────────────────────────────────────── */
+
+.session-dots {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--border);
+  transition: background var(--transition), transform 0.2s ease;
+}
+
+.dot-filled {
+  background: var(--accent);
+  transform: scale(1.25);
+}
+
+.app-break .dot-filled { background: var(--accent-break); }
+
+/* ── Control bar ─────────────────────────────────────────────────────────── */
+
+.control-bar {
+  display: flex;
+  align-items: center;
+  gap: clamp(16px, 6%, 28px);
+  flex-shrink: 0;
+}
+
+.btn-icon {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 9px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.18s, background 0.18s;
+  line-height: 0;
+}
+
+.btn-icon:hover  { color: var(--text); background: var(--bg-hover); }
+.btn-icon:active { transform: scale(0.92); }
+
+.btn-primary {
+  background: var(--accent);
+  border: none;
+  color: var(--on-accent);
+  cursor: pointer;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s, background var(--transition), box-shadow var(--transition);
+  box-shadow: 0 4px 20px var(--accent-shadow);
+  line-height: 0;
+}
+
+.btn-primary:hover  { transform: scale(1.07); box-shadow: 0 6px 24px var(--accent-shadow); }
+.btn-primary:active { transform: scale(0.95); }
+
+.app-break .btn-primary {
+  background: var(--accent-break);
+  box-shadow: 0 4px 20px var(--accent-break-shadow);
+}
+.app-break .btn-primary:hover { box-shadow: 0 6px 24px var(--accent-break-shadow); }
+
+/* ── Settings panel ──────────────────────────────────────────────────────── */
+
+.settings-overlay {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+  animation: slide-up 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slide-up {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 38px;
+  padding: 0 14px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.settings-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.btn-save {
+  background: var(--accent);
+  border: none;
+  color: var(--on-accent);
+  cursor: pointer;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 0;
+  transition: transform 0.15s;
+}
+.btn-save:hover { transform: scale(1.1); }
+
+.settings-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 14px;
+  overflow-y: auto;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+
+.setting-label {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.input-group {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.setting-input {
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  width: 50px;
+  height: 28px;
+  outline: none;
+  transition: border-color 0.18s;
+  font-family: inherit;
+}
+.setting-input:focus { border-color: var(--accent); }
+
+.setting-unit {
+  font-size: 11px;
+  color: var(--text-muted);
+  min-width: 20px;
+}
+
+.toggle-wrap { display: flex; align-items: center; }
+
+.toggle {
+  width: 38px;
+  height: 21px;
+  background: var(--border);
+  border-radius: 11px;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.22s;
+  border: none;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.toggle[aria-checked="true"] { background: var(--accent); }
+
+.toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 15px;
+  height: 15px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+}
+
+.toggle[aria-checked="true"] .toggle-thumb { transform: translateX(17px); }
+
+/* Range slider for transparency */
+.setting-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 110px;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.setting-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: none;
+  transition: transform 0.15s, background 0.18s;
+}
+
+.setting-slider::-webkit-slider-thumb:hover { transform: scale(1.15); }
+
+.setting-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: none;
+}
+
+/* Theme pill — small button showing current theme; click to flip. */
+.theme-pill {
+  background: var(--bg-hover);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s, border-color 0.18s;
+}
+
+.theme-pill:hover {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
+}
+
+/* ── Mini mode ───────────────────────────────────────────────────────────── */
+
+.app-mini {
+  flex-direction: row;
+  align-items: center;
+  height: 100%;
+  width: 100%;
+  padding: 0 5px;
+  gap: 2px;
+  /* User-controlled opacity (var set from App.tsx). 1 = fully opaque. */
+  background: color-mix(in srgb, var(--bg-surface) calc(var(--mini-opacity, 1) * 100%), transparent);
+  cursor: grab;
+  border-radius: 10px;
+  transition: background 0.2s ease;
+}
+
+.app-mini:active { cursor: grabbing; }
+
+.mini-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  cursor: grab;
+}
+
+.mini-phase-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+  transition: background var(--transition);
+}
+
+.app-break .mini-phase-dot { background: var(--accent-break); }
+
+.mini-digits {
+  font-size: 17px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  color: var(--text);
+  line-height: 1;
+  letter-spacing: 1px;
+}
+
+.mini-phase-label {
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Mini buttons */
+.btn-mini {
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  border-radius: 6px;
+  transition: color 0.18s, background 0.18s, transform 0.15s;
+  flex-shrink: 0;
+  padding: 4px;
+  color: var(--text-muted);
+}
+
+.btn-mini:hover  { color: var(--text); background: var(--bg-hover); }
+.btn-mini:active { transform: scale(0.9); }
+
+.btn-mini-play {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  padding: 0;
+  box-shadow: 0 2px 8px var(--accent-shadow);
+  transition: transform 0.15s, background var(--transition), box-shadow var(--transition);
+}
+.btn-mini-play:hover  { transform: scale(1.08); background: var(--accent); }
+.btn-mini-break       { background: var(--accent-break); box-shadow: 0 2px 10px var(--accent-break-shadow); }
+.btn-mini-break:hover { background: var(--accent-break); }
+
+.btn-mini-close:hover {
+  color: #ff5f57;
+  background: rgba(255, 95, 87, 0.15);
+}
+
+/* ── Remove number input arrows ──────────────────────────────────────────── */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
+input[type=number] { -moz-appearance: textfield; appearance: textfield; }

@@ -1,0 +1,188 @@
+import { useState, useEffect, useRef, useCallback } from "react";
+
+export type Phase = "idle" | "work" | "break" | "longBreak";
+
+export type Theme = "dark" | "light";
+
+export interface TimerSettings {
+  workMinutes: number;
+  breakMinutes: number;
+  longBreakMinutes: number;
+  sessionsBeforeLongBreak: number;
+  soundEnabled: boolean;
+  alwaysOnTop: boolean;
+  theme: Theme;
+  autoMiniOnBlur: boolean;
+  miniOpacity: number; // 0.3–1.0, applies only in mini mode
+}
+
+const DEFAULTS: TimerSettings = {
+  workMinutes: 25,
+  breakMinutes: 5,
+  longBreakMinutes: 15,
+  sessionsBeforeLongBreak: 4,
+  soundEnabled: true,
+  alwaysOnTop: false,
+  theme: "dark",
+  autoMiniOnBlur: true,
+  miniOpacity: 0.6,
+};
+
+export function playChime() {
+  try {
+    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const now = ctx.currentTime;
+    // Two-note chime — pleasant, not alarming
+    [880, 1320].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      const start = now + i * 0.18;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.28, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.9);
+      osc.start(start);
+      osc.stop(start + 0.95);
+    });
+    setTimeout(() => ctx.close(), 1500);
+  } catch { /* audio not available */ }
+}
+
+function loadSettings(): TimerSettings {
+  try {
+    const s = localStorage.getItem("beeontime-settings");
+    if (s) return { ...DEFAULTS, ...JSON.parse(s) };
+  } catch { /* ignore */ }
+  return DEFAULTS;
+}
+
+async function sendNotify(title: string, body: string) {
+  try {
+    const { isPermissionGranted, requestPermission, sendNotification } =
+      await import("@tauri-apps/plugin-notification");
+    let ok = await isPermissionGranted();
+    if (!ok) ok = (await requestPermission()) === "granted";
+    if (ok) sendNotification({ title, body });
+  } catch { /* not in Tauri env */ }
+}
+
+function phaseDuration(p: Phase, s: TimerSettings): number {
+  if (p === "break") return s.breakMinutes * 60;
+  if (p === "longBreak") return s.longBreakMinutes * 60;
+  return s.workMinutes * 60;
+}
+
+export function useTimer() {
+  const [settings, setSettings] = useState<TimerSettings>(loadSettings);
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [running, setRunning] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(() => loadSettings().workMinutes * 60);
+  const [sessions, setSessions] = useState(0);
+
+  const phaseRef = useRef(phase);
+  const sessionsRef = useRef(sessions);
+  const settingsRef = useRef(settings);
+  phaseRef.current = phase;
+  sessionsRef.current = sessions;
+  settingsRef.current = settings;
+
+  const totalSeconds = phaseDuration(phase === "idle" ? "work" : phase, settings);
+  const progress = totalSeconds > 0 ? secondsLeft / totalSeconds : 1;
+
+  const transitionPhase = useCallback(() => {
+    const cur = phaseRef.current;
+    const curSessions = sessionsRef.current;
+    const s = settingsRef.current;
+
+    if (cur === "work" || cur === "idle") {
+      const next = curSessions + 1;
+      setSessions(next);
+      const isLong = next % s.sessionsBeforeLongBreak === 0;
+      const nextPhase: Phase = isLong ? "longBreak" : "break";
+      setPhase(nextPhase);
+      setSecondsLeft(phaseDuration(nextPhase, s));
+      sendNotify("Break time!", isLong ? "Long break — well deserved!" : "Take a short break.");
+    } else {
+      setPhase("work");
+      setSecondsLeft(phaseDuration("work", s));
+      sendNotify("Work time!", "Start your focus session.");
+    }
+    if (s.soundEnabled) playChime();
+  }, []);
+
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => {
+      setSecondsLeft(prev => {
+        if (prev <= 1) {
+          clearInterval(id);
+          setRunning(false);
+          setTimeout(transitionPhase, 0);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [running, transitionPhase]);
+
+  const start = useCallback(() => {
+    if (phaseRef.current === "idle") {
+      const s = settingsRef.current;
+      setPhase("work");
+      setSecondsLeft(s.workMinutes * 60);
+    }
+    setRunning(true);
+  }, []);
+
+  const pause = useCallback(() => setRunning(false), []);
+
+  // Skip current phase: stop ticking and immediately transition.
+  // Useful for the mini context menu — "I'm done early, give me the break".
+  const skipPhase = useCallback(() => {
+    setRunning(false);
+    setTimeout(() => transitionPhase(), 0);
+  }, [transitionPhase]);
+
+  const reset = useCallback(() => {
+    setRunning(false);
+    setPhase("idle");
+    setSessions(0);
+    setSecondsLeft(settingsRef.current.workMinutes * 60);
+  }, []);
+
+  const saveSettings = useCallback((s: TimerSettings) => {
+    setSettings(s);
+    localStorage.setItem("beeontime-settings", JSON.stringify(s));
+    // Only update the displayed countdown if idle — never interrupt a running session.
+    // New durations apply to the NEXT phase.
+    if (phaseRef.current === "idle") {
+      setSecondsLeft(s.workMinutes * 60);
+    }
+  }, []);
+
+  const minutes = Math.floor(secondsLeft / 60);
+  const seconds = secondsLeft % 60;
+
+  return {
+    phase,
+    running,
+    secondsLeft,
+    totalSeconds,
+    progress,
+    sessions,
+    settings,
+    minutes,
+    seconds,
+    start,
+    pause,
+    skipPhase,
+    reset,
+    saveSettings,
+  };
+}
