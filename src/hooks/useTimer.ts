@@ -115,20 +115,39 @@ export function useTimer() {
     if (s.soundEnabled) playChime();
   }, []);
 
+  // Wall-clock based countdown: we capture the start time and start seconds
+  // once, then compute the remaining value from Date.now() on each tick.
+  // This means the UI catches up correctly after the window has been hidden
+  // (and JS timers throttled). Also fires immediately on visibilitychange so
+  // showing the window after a long hide instantly refreshes the digits.
+  const secondsLeftRef = useRef(secondsLeft);
+  secondsLeftRef.current = secondsLeft;
+
   useEffect(() => {
     if (!running) return;
-    const id = setInterval(() => {
-      setSecondsLeft(prev => {
-        if (prev <= 1) {
-          clearInterval(id);
-          setRunning(false);
-          setTimeout(transitionPhase, 0);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(id);
+    const startWall = Date.now();
+    const startSeconds = secondsLeftRef.current;
+
+    const tick = () => {
+      const elapsed = Math.floor((Date.now() - startWall) / 1000);
+      const next = startSeconds - elapsed;
+      if (next <= 0) {
+        setSecondsLeft(0);
+        setRunning(false);
+        setTimeout(transitionPhase, 0);
+      } else {
+        setSecondsLeft(next);
+      }
+    };
+
+    const id = setInterval(tick, 1000);
+    const onVisible = () => { if (!document.hidden) tick(); };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [running, transitionPhase]);
 
   const start = useCallback(() => {

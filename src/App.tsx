@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { getCurrentWindow, currentMonitor } from "@tauri-apps/api/window";
 import { LogicalSize, PhysicalPosition } from "@tauri-apps/api/dpi";
 import { Menu, MenuItem, PredefinedMenuItem } from "@tauri-apps/api/menu";
+import { invoke } from "@tauri-apps/api/core";
 import { useTimer } from "./hooks/useTimer";
 import { TimerDisplay } from "./components/TimerDisplay";
 import { ControlBar } from "./components/ControlBar";
@@ -13,9 +14,11 @@ const FULL_H = 380;
 const MINI_W = 205;
 const MINI_H = 46;
 
-async function winClose() {
-  try { await getCurrentWindow().close(); }
-  catch (e) { console.warn("[BeeOnTime] close failed:", e); }
+// Hide the window instead of closing — the app stays alive in the tray
+// (where the countdown keeps showing). Full quit is via tray menu → "Quit".
+async function winHide() {
+  try { await getCurrentWindow().hide(); }
+  catch (e) { console.warn("[BeeOnTime] hide failed:", e); }
 }
 
 async function winStartDrag() {
@@ -175,6 +178,17 @@ export default function App() {
       String(timer.settings.miniOpacity)
     );
   }, [timer.settings.miniOpacity]);
+
+  // Sync timer state to Rust, which runs its own ticker that keeps the tray
+  // title (macOS menu bar / Win tooltip) updated even when the window is
+  // hidden and JS is throttled. We push on every change to running and
+  // secondsLeft — Rust uses these to compute end_time and counts down locally.
+  useEffect(() => {
+    invoke("tray_sync_state", {
+      running: timer.running,
+      secondsLeft: timer.secondsLeft,
+    }).catch(() => { /* not in Tauri */ });
+  }, [timer.running, timer.secondsLeft]);
 
   // Auto-mini on blur. Latest state lives in a ref so the focus listener
   // (attached once) always reads the current values without re-binding.
@@ -336,7 +350,7 @@ export default function App() {
           {timer.running ? <IconPause /> : <IconPlay />}
         </button>
 
-        <button className="btn-mini btn-mini-close" onClick={winClose} title="Close BeeOnTime">
+        <button className="btn-mini btn-mini-close" onClick={winHide} title="Hide (timer keeps running in tray)">
           <IconClose />
         </button>
       </div>
@@ -357,7 +371,7 @@ export default function App() {
           <IconMinimize />
         </button>
         <span className="app-title" data-tauri-drag-region>BeeOnTime</span>
-        <button className="titlebar-btn titlebar-btn-close" onClick={winClose} title="Close">
+        <button className="titlebar-btn titlebar-btn-close" onClick={winHide} title="Hide (timer keeps running in tray)">
           <IconClose />
         </button>
       </div>
