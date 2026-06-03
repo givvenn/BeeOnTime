@@ -150,11 +150,16 @@ body {
   min-height: 0;
 }
 
-/* SVG scales with container width; aspect ratio maintained via viewBox */
+/* SVG scales with container width; aspect ratio maintained via viewBox.
+ * `max-height: 100%` plus `object-fit: contain` makes the square SVG
+ * shrink when its flex parent is short (e.g. when the BusyBee task banner
+ * is rendered above), instead of painting outside the box and overlapping
+ * SessionDots / ControlBar below it. */
 .timer-svg {
   width: 100%;
   height: auto;
   max-width: 280px;
+  max-height: 100%;
   overflow: visible;
 }
 

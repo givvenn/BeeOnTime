@@ -1,3 +1,5 @@
+mod busybee;
+
 use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -71,7 +73,15 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
         .manage(tray_state)
-        .invoke_handler(tauri::generate_handler![tray_sync_state])
+        .manage(busybee::BusyBeeState::default())
+        .invoke_handler(tauri::generate_handler![
+            tray_sync_state,
+            busybee::bb_set_config,
+            busybee::bb_clear_config,
+            busybee::bb_get_status,
+            busybee::bb_list_open_tasks,
+            busybee::bb_get_task_card,
+        ])
         .setup(|app| {
             let show_hide = MenuItem::with_id(app, "show_hide", "Show / Hide", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit BeeOnTime", true, None::<&str>)?;

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { TimerSettings, playChime } from "../hooks/useTimer";
+import { BusyBeeSettings } from "./busybee";
 
 interface Props {
   settings: TimerSettings;
@@ -47,6 +48,10 @@ export function Settings({ settings, onSave, onClose }: Props) {
 
   const toggleAutoMini = () => {
     setLocal(prev => ({ ...prev, autoMiniOnBlur: !prev.autoMiniOnBlur }));
+  };
+
+  const toggleShowBusyBeeTask = () => {
+    setLocal(prev => ({ ...prev, showBusyBeeTask: !prev.showBusyBeeTask }));
   };
 
   const handleSave = () => {
@@ -195,6 +200,23 @@ export function Settings({ settings, onSave, onClose }: Props) {
             </button>
           </div>
         </div>
+
+        <div className="setting-row">
+          <span className="setting-label">Show BusyBee task</span>
+          <div className="toggle-wrap">
+            <button
+              className="toggle"
+              role="switch"
+              aria-checked={local.showBusyBeeTask}
+              onClick={toggleShowBusyBeeTask}
+              title="Show the BusyBee task banner above the timer"
+            >
+              <div className="toggle-thumb" />
+            </button>
+          </div>
+        </div>
+
+        <BusyBeeSettings />
       </div>
     </div>
   );

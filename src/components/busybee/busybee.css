@@ -1,0 +1,311 @@
+/* BusyBee integration UI.
+ *
+ * Designed to slot into the existing BeeOnTime palette (CSS vars from
+ * index.css). Uses `color-mix` where appropriate so it inherits theme
+ * tweaks; falls back gracefully if a variable isn't defined.
+ *
+ * Two visual surfaces:
+ *   .bb-active  — compact banner in the main window (above the timer)
+ *   .bb-picker  — full-window overlay listing pickable tasks
+ *   .bb-settings — section inside the existing Settings overlay
+ */
+
+:root {
+  --bb-accent: var(--accent, #f59e0b);
+  --bb-bg: var(--bg, #11131a);
+  --bb-fg: var(--fg, #e6e8ee);
+  --bb-muted: var(--muted, #8b93a6);
+  --bb-card: var(--card, #1a1d27);
+  --bb-border: var(--border, rgba(255, 255, 255, 0.08));
+}
+
+/* ─── Active task banner ─────────────────────────────────────────── */
+
+/* Compact one-row banner so it doesn't steal vertical space from the
+ * fixed-aspect timer ring. Title gets the bulk of the row; project name
+ * shows as a tiny tail and ellipses first when space is tight. The meta
+ * row (duration / due) is collapsed onto a small second line shown only
+ * when there's room. */
+.bb-active {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
+  padding: 4px 8px;
+  margin: 0;
+  background: var(--bb-card);
+  border: 1px solid var(--bb-border);
+  border-radius: 6px;
+  color: var(--bb-fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  flex-shrink: 0; /* never let flex compress the banner */
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.bb-active:hover { border-color: color-mix(in srgb, var(--bb-accent) 40%, transparent); }
+
+.bb-active--empty {
+  color: var(--bb-muted);
+  font-style: italic;
+  font-size: 11px;
+}
+.bb-active--loading {
+  color: var(--bb-muted);
+  padding: 4px 8px;
+  font-size: 11px;
+}
+.bb-active--error {
+  border-color: #ef4444;
+  color: #fecaca;
+  font-size: 11px;
+}
+
+.bb-active__row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  line-height: 1.2;
+}
+.bb-active__title {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bb-active__chip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 13px;
+  padding: 0 4px;
+  border-radius: 3px;
+  color: white;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.bb-active__meta {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  font-size: 9px;
+  line-height: 1.2;
+  color: var(--bb-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bb-active__project {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+/* ─── Picker overlay ─────────────────────────────────────────────── */
+
+.bb-picker__overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 12px;
+}
+.bb-picker {
+  width: 100%;
+  max-width: 260px;
+  max-height: 80vh;
+  background: var(--bb-card);
+  color: var(--bb-fg);
+  border: 1px solid var(--bb-border);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+.bb-picker__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--bb-border);
+  font-size: 12px;
+  font-weight: 600;
+}
+.bb-picker__close {
+  background: none;
+  border: none;
+  color: var(--bb-muted);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.bb-picker__close:hover { color: var(--bb-fg); }
+
+.bb-picker__loading,
+.bb-picker__empty,
+.bb-picker__error {
+  padding: 12px;
+  font-size: 11px;
+  color: var(--bb-muted);
+  text-align: center;
+}
+.bb-picker__error { color: #fca5a5; }
+
+.bb-picker__list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+.bb-picker__item button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: none;
+  border: none;
+  color: inherit;
+  padding: 6px 6px;
+  border-radius: 5px;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+.bb-picker__item button:hover { background: color-mix(in srgb, var(--bb-fg) 8%, transparent); }
+.bb-picker__item.is-selected button { background: color-mix(in srgb, var(--bb-accent) 18%, transparent); }
+.bb-picker__item--clear button {
+  color: var(--bb-muted);
+  font-style: italic;
+  border-bottom: 1px solid var(--bb-border);
+  border-radius: 0;
+  margin-bottom: 2px;
+}
+
+.bb-picker__chip {
+  flex-shrink: 0;
+  height: 14px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 3px;
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+}
+.bb-picker__title {
+  flex: 1;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bb-picker__meta {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--bb-muted);
+}
+
+/* ─── Settings panel (inside existing Settings overlay) ──────────── */
+
+.bb-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--bb-border);
+}
+.bb-settings__header {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--bb-muted);
+}
+.bb-settings__hint { font-size: 11px; color: var(--bb-muted); }
+.bb-settings__connected {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+.bb-settings__dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #22c55e 30%, transparent);
+}
+.bb-settings__url {
+  font-size: 10px;
+  color: var(--bb-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  word-break: break-all;
+}
+.bb-settings__label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--bb-muted);
+}
+.bb-settings__input {
+  background: var(--bb-bg);
+  color: var(--bb-fg);
+  border: 1px solid var(--bb-border);
+  border-radius: 5px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 11px;
+}
+.bb-settings__input--mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.bb-settings__input:focus {
+  outline: none;
+  border-color: var(--bb-accent);
+}
+.bb-settings__btn {
+  background: var(--bb-accent);
+  color: black;
+  border: none;
+  border-radius: 5px;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.bb-settings__btn:hover:not(:disabled) { filter: brightness(1.05); }
+.bb-settings__btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.bb-settings__btn--ghost {
+  background: transparent;
+  border: 1px solid var(--bb-border);
+  color: var(--bb-fg);
+}
+.bb-settings__help {
+  font-size: 10px;
+  color: var(--bb-muted);
+  margin: 0;
+}
+.bb-settings__help code {
+  background: var(--bb-bg);
+  border-radius: 3px;
+  padding: 0 3px;
+  font-size: 10px;
+}
+.bb-settings__error {
+  font-size: 10px;
+  color: #fca5a5;
+  background: color-mix(in srgb, #ef4444 14%, transparent);
+  border-radius: 5px;
+  padding: 4px 6px;
+}

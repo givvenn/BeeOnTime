@@ -5,6 +5,7 @@ import { Menu, MenuItem, PredefinedMenuItem } from "@tauri-apps/api/menu";
 import { invoke } from "@tauri-apps/api/core";
 import { useTimer } from "./hooks/useTimer";
 import { TimerDisplay } from "./components/TimerDisplay";
+import { BusyBeeActiveTask } from "./components/busybee";
 import { ControlBar } from "./components/ControlBar";
 import { Settings } from "./components/Settings";
 import { SessionDots } from "./components/SessionDots";
@@ -377,6 +378,14 @@ export default function App() {
       </div>
 
       <div className="main-content">
+        {timer.settings.showBusyBeeTask && (
+          <BusyBeeActiveTask
+            workMinutes={timer.settings.workMinutes}
+            onTargetChange={timer.setTaskTarget}
+            progress={timer.taskProgress}
+            target={timer.taskTarget}
+          />
+        )}
         <TimerDisplay
           phase={timer.phase}
           progress={timer.progress}

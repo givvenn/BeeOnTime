@@ -14,6 +14,7 @@ export interface TimerSettings {
   theme: Theme;
   autoMiniOnBlur: boolean;
   miniOpacity: number; // 0.3–1.0, applies only in mini mode
+  showBusyBeeTask: boolean; // show the BusyBee active-task banner above the timer
 }
 
 const DEFAULTS: TimerSettings = {
@@ -26,6 +27,7 @@ const DEFAULTS: TimerSettings = {
   theme: "dark",
   autoMiniOnBlur: true,
   miniOpacity: 0.6,
+  showBusyBeeTask: true,
 };
 
 export function playChime() {
@@ -84,12 +86,23 @@ export function useTimer() {
   const [secondsLeft, setSecondsLeft] = useState(() => loadSettings().workMinutes * 60);
   const [sessions, setSessions] = useState(0);
 
+  // Task-aware auto-chain. When an external caller (BusyBeeActiveTask) sets a
+  // target, the timer counts completed work-phases against it and auto-resumes
+  // through break + next work until the target is reached. Null target means
+  // standard manual chaining — user clicks Start between phases.
+  const [taskTarget, setTaskTargetState] = useState<number | null>(null);
+  const [taskProgress, setTaskProgress] = useState(0);
+
   const phaseRef = useRef(phase);
   const sessionsRef = useRef(sessions);
   const settingsRef = useRef(settings);
+  const taskTargetRef = useRef(taskTarget);
+  const taskProgressRef = useRef(taskProgress);
   phaseRef.current = phase;
   sessionsRef.current = sessions;
   settingsRef.current = settings;
+  taskTargetRef.current = taskTarget;
+  taskProgressRef.current = taskProgress;
 
   const totalSeconds = phaseDuration(phase === "idle" ? "work" : phase, settings);
   const progress = totalSeconds > 0 ? secondsLeft / totalSeconds : 1;
@@ -98,6 +111,7 @@ export function useTimer() {
     const cur = phaseRef.current;
     const curSessions = sessionsRef.current;
     const s = settingsRef.current;
+    const target = taskTargetRef.current;
 
     if (cur === "work" || cur === "idle") {
       const next = curSessions + 1;
@@ -106,11 +120,39 @@ export function useTimer() {
       const nextPhase: Phase = isLong ? "longBreak" : "break";
       setPhase(nextPhase);
       setSecondsLeft(phaseDuration(nextPhase, s));
-      sendNotify("Break time!", isLong ? "Long break — well deserved!" : "Take a short break.");
+
+      // Task-aware auto-chain: bump the per-task pomodoro counter and decide
+      // whether to keep running automatically or stop and prompt the user.
+      let reachedTarget = false;
+      if (target != null) {
+        const nextProgress = taskProgressRef.current + 1;
+        setTaskProgress(nextProgress);
+        taskProgressRef.current = nextProgress;
+        reachedTarget = nextProgress >= target;
+      }
+
+      if (target != null && reachedTarget) {
+        sendNotify(
+          "Task pomodoros done",
+          `${target}/${target} complete — mark the task done in BusyBee?`
+        );
+        // Stay idle; user decides whether to keep going or move on.
+      } else {
+        sendNotify("Break time!", isLong ? "Long break — well deserved!" : "Take a short break.");
+        if (target != null) {
+          // Auto-flow into the break; the next work transition will also
+          // auto-resume (see else branch below). Small delay so the running=false
+          // → running=true flip is observed by the timer ticker effect.
+          setTimeout(() => setRunning(true), 100);
+        }
+      }
     } else {
       setPhase("work");
       setSecondsLeft(phaseDuration("work", s));
       sendNotify("Work time!", "Start your focus session.");
+      if (target != null && taskProgressRef.current < target) {
+        setTimeout(() => setRunning(true), 100);
+      }
     }
     if (s.soundEnabled) playChime();
   }, []);
@@ -173,6 +215,23 @@ export function useTimer() {
     setPhase("idle");
     setSessions(0);
     setSecondsLeft(settingsRef.current.workMinutes * 60);
+    // Reset per-task counter but keep the target — same task, fresh attempt.
+    setTaskProgress(0);
+    taskProgressRef.current = 0;
+  }, []);
+
+  // Public setter that callers (BusyBeeActiveTask) use to attach / detach
+  // the task target. Re-applying the same value is a no-op, so it's safe to
+  // call from an effect that depends on card data.
+  const setTaskTarget = useCallback((n: number | null) => {
+    setTaskTargetState(prev => {
+      if (prev === n) return prev;
+      // Target changed (or cleared) → progress resets so the new task starts
+      // counting from zero.
+      setTaskProgress(0);
+      taskProgressRef.current = 0;
+      return n;
+    });
   }, []);
 
   const saveSettings = useCallback((s: TimerSettings) => {
@@ -203,5 +262,8 @@ export function useTimer() {
     skipPhase,
     reset,
     saveSettings,
+    taskTarget,
+    taskProgress,
+    setTaskTarget,
   };
 }
