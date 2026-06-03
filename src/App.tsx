@@ -208,31 +208,53 @@ export default function App() {
 
   useEffect(() => {
     let pending: ReturnType<typeof setTimeout> | null = null;
-    let unlisten: (() => void) | null = null;
+    let unlistenFocus: (() => void) | null = null;
+    let unlistenMoved: (() => void) | null = null;
+    // Tracks the wall-clock time of the most recent window move. Dragging
+    // across a monitor boundary on macOS briefly steals focus from the
+    // window, which would otherwise queue an auto-mini transition mid-drag
+    // and resize the window under the user's cursor. Anything within ~2s of
+    // a move is treated as drag-induced and ignored.
+    let lastMoveAt = 0;
 
-    getCurrentWindow()
-      .onFocusChanged(({ payload: focused }) => {
-        if (focused) {
-          if (pending) { clearTimeout(pending); pending = null; }
-          return;
+    const win = getCurrentWindow();
+
+    win.onMoved(() => {
+      lastMoveAt = Date.now();
+      // While actively dragging, kill any auto-mini timer that may have been
+      // queued by an earlier transient blur — the user is clearly interacting
+      // with the window, not walking away from it.
+      if (pending) { clearTimeout(pending); pending = null; }
+    })
+      .then((fn) => { unlistenMoved = fn; })
+      .catch((e) => console.warn("[BeeOnTime] move listener failed:", e));
+
+    win.onFocusChanged(({ payload: focused }) => {
+      if (focused) {
+        if (pending) { clearTimeout(pending); pending = null; }
+        return;
+      }
+      // Skip drag-induced blurs.
+      if (Date.now() - lastMoveAt < 2000) return;
+      const s = autoMiniStateRef.current;
+      if (!s.autoMiniOnBlur || !s.running || s.phase !== "work" || s.isMini) return;
+      pending = setTimeout(async () => {
+        // Re-check at fire time — state may have changed during the 3s wait,
+        // and a fresh move event would also have killed `pending` already.
+        const cur = autoMiniStateRef.current;
+        if (!cur.isMini && cur.running && cur.phase === "work") {
+          setIsMini(true);
+          await winShrinkToMini();
         }
-        const s = autoMiniStateRef.current;
-        if (!s.autoMiniOnBlur || !s.running || s.phase !== "work" || s.isMini) return;
-        pending = setTimeout(async () => {
-          // Re-check at fire time — state may have changed during the 3s wait.
-          const cur = autoMiniStateRef.current;
-          if (!cur.isMini && cur.running && cur.phase === "work") {
-            setIsMini(true);
-            await winShrinkToMini();
-          }
-        }, 3000);
-      })
-      .then((fn) => { unlisten = fn; })
+      }, 3000);
+    })
+      .then((fn) => { unlistenFocus = fn; })
       .catch((e) => console.warn("[BeeOnTime] focus listener failed:", e));
 
     return () => {
       if (pending) clearTimeout(pending);
-      unlisten?.();
+      unlistenFocus?.();
+      unlistenMoved?.();
     };
   }, []);
 
@@ -382,6 +404,7 @@ export default function App() {
           <BusyBeeActiveTask
             workMinutes={timer.settings.workMinutes}
             onTargetChange={timer.setTaskTarget}
+            onResetProgress={timer.resetTaskProgress}
             progress={timer.taskProgress}
             target={timer.taskTarget}
           />

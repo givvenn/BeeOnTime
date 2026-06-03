@@ -6,7 +6,7 @@
 // compute "how many pomodoros for this task" and the live progress counter,
 // so the banner reads "1/3 🍅" instead of just an estimate.
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { PRIORITY_COLOURS, formatRelativeDue } from "../../lib/busybee";
 import { useActiveTaskId, useTaskCard, useBusyBeeStatus } from "../../hooks/useBusyBee";
 import { BusyBeeTaskPicker } from "./BusyBeeTaskPicker";
@@ -16,28 +16,38 @@ type Props = {
   workMinutes: number;
   /** Push the recomputed target up to useTimer; null clears it. */
   onTargetChange: (target: number | null) => void;
+  /** Reset the per-task pomodoro counter — called only when the selected
+   * task itself changes, not on workMinutes recalcs. */
+  onResetProgress: () => void;
   /** Completed pomodoros for the active task so far this session. */
   progress: number;
   /** Total pomodoros expected for the active task (null = no task). */
   target: number | null;
 };
 
-export function BusyBeeActiveTask({ workMinutes, onTargetChange, progress, target }: Props) {
+export function BusyBeeActiveTask({ workMinutes, onTargetChange, onResetProgress, progress, target }: Props) {
   const { status } = useBusyBeeStatus();
   const [activeId, setActiveId] = useActiveTaskId();
   const { card, error, loading } = useTaskCard(activeId);
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  // Recompute the target whenever the active card or workMinutes changes.
-  // A null card (no selection / pre-fetch) clears the target so the timer
-  // falls back to standard manual chaining.
+  // Track the last task we reported so we can distinguish "user picked a new
+  // task" (→ reset progress) from "workMinutes changed, target shifted"
+  // (→ keep progress; the user shouldn't lose credit for completed pomodoros).
+  const lastTaskIdRef = useRef<string | null>(null);
+
   useEffect(() => {
+    const currentId = card?.id ?? null;
+    if (currentId !== lastTaskIdRef.current) {
+      onResetProgress();
+      lastTaskIdRef.current = currentId;
+    }
     if (!card || !card.duration_minutes || workMinutes <= 0) {
       onTargetChange(null);
       return;
     }
     onTargetChange(Math.max(1, Math.ceil(card.duration_minutes / workMinutes)));
-  }, [card, workMinutes, onTargetChange]);
+  }, [card, workMinutes, onTargetChange, onResetProgress]);
 
   // Hide the banner entirely when BusyBee isn't connected — the Settings
   // panel is where you onboard, no need to nag from the main screen.

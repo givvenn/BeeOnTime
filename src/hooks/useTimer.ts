@@ -93,6 +93,11 @@ export function useTimer() {
   const [taskTarget, setTaskTargetState] = useState<number | null>(null);
   const [taskProgress, setTaskProgress] = useState(0);
 
+  // Bumped whenever an external action (e.g. mid-phase saveSettings rebalance)
+  // mutates secondsLeft directly — re-runs the ticker effect so it captures
+  // the new startSeconds instead of the stale closure value.
+  const [tickEpoch, setTickEpoch] = useState(0);
+
   const phaseRef = useRef(phase);
   const sessionsRef = useRef(sessions);
   const settingsRef = useRef(settings);
@@ -190,7 +195,7 @@ export function useTimer() {
       clearInterval(id);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [running, transitionPhase]);
+  }, [running, transitionPhase, tickEpoch]);
 
   const start = useCallback(() => {
     if (phaseRef.current === "idle") {
@@ -221,28 +226,60 @@ export function useTimer() {
   }, []);
 
   // Public setter that callers (BusyBeeActiveTask) use to attach / detach
-  // the task target. Re-applying the same value is a no-op, so it's safe to
-  // call from an effect that depends on card data.
+  // the task target. Does NOT touch progress — callers should also invoke
+  // resetTaskProgress() when the selected task actually changes (vs. just a
+  // workMinutes recalc that bumps the target arithmetic but leaves the same
+  // task in flight).
   const setTaskTarget = useCallback((n: number | null) => {
-    setTaskTargetState(prev => {
-      if (prev === n) return prev;
-      // Target changed (or cleared) → progress resets so the new task starts
-      // counting from zero.
-      setTaskProgress(0);
-      taskProgressRef.current = 0;
-      return n;
-    });
+    setTaskTargetState(n);
+  }, []);
+
+  // Explicit progress reset hook — called when the active task identity
+  // changes, or when the user wants a fresh attempt on the same task.
+  const resetTaskProgress = useCallback(() => {
+    setTaskProgress(0);
+    taskProgressRef.current = 0;
   }, []);
 
   const saveSettings = useCallback((s: TimerSettings) => {
+    const prev = settingsRef.current;
+    const curPhase = phaseRef.current;
     setSettings(s);
     localStorage.setItem("beeontime-settings", JSON.stringify(s));
-    // Only update the displayed countdown if idle — never interrupt a running session.
-    // New durations apply to the NEXT phase.
-    if (phaseRef.current === "idle") {
+
+    if (curPhase === "idle") {
+      // Apply the new work duration to the displayed countdown immediately.
       setSecondsLeft(s.workMinutes * 60);
+      return;
     }
-  }, []);
+
+    // Mid-phase: rebalance secondsLeft so the user keeps credit for the time
+    // they've already spent in the current phase. E.g. 10 min into a 25-min
+    // work phase, then change to 20 min → newRemaining = 20 - 10 = 10 min;
+    // display flips to 10:00 instead of staying at the stale 15:00.
+    const prevTotal = phaseDuration(curPhase, prev);
+    const newTotal = phaseDuration(curPhase, s);
+    if (newTotal === prevTotal) return;
+
+    const elapsed = prevTotal - secondsLeftRef.current;
+    const newRemaining = newTotal - elapsed;
+
+    if (newRemaining <= 0) {
+      // The new phase length is shorter than what the user has already
+      // worked → the phase is effectively done. Stop ticking and transition
+      // immediately so auto-chain continues into the next phase.
+      setSecondsLeft(0);
+      secondsLeftRef.current = 0;
+      setRunning(false);
+      setTimeout(transitionPhase, 0);
+    } else {
+      setSecondsLeft(newRemaining);
+      secondsLeftRef.current = newRemaining;
+      // Re-arm the wall-clock ticker so it captures the fresh startSeconds
+      // instead of subtracting elapsed time from the stale value.
+      setTickEpoch(e => e + 1);
+    }
+  }, [transitionPhase]);
 
   const minutes = Math.floor(secondsLeft / 60);
   const seconds = secondsLeft % 60;
@@ -265,5 +302,6 @@ export function useTimer() {
     taskTarget,
     taskProgress,
     setTaskTarget,
+    resetTaskProgress,
   };
 }

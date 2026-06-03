@@ -71,6 +71,18 @@ pub fn run() {
     });
 
     tauri::Builder::default()
+        // Single-instance: a second launch (Finder double-click on the built
+        // .app, or a stray `npm run tauri dev` in another terminal) routes
+        // through this callback in the existing process and the new one
+        // exits. The tray countdown in the first instance keeps ticking
+        // without interruption.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.show();
+                let _ = win.unminimize();
+                let _ = win.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_notification::init())
         .manage(tray_state)
         .manage(busybee::BusyBeeState::default())
