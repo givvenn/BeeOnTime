@@ -403,7 +403,9 @@ export default function App() {
         {timer.settings.showBusyBeeTask && (
           <BusyBeeActiveTask
             workMinutes={timer.settings.workMinutes}
+            workTimeSource={timer.settings.workTimeSource}
             onTargetChange={timer.setTaskTarget}
+            onWorkMinutesOverride={timer.setWorkMinutesOverride}
             onResetProgress={timer.resetTaskProgress}
             progress={timer.taskProgress}
             target={timer.taskTarget}

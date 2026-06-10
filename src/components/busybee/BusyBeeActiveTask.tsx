@@ -14,8 +14,15 @@ import { BusyBeeTaskPicker } from "./BusyBeeTaskPicker";
 type Props = {
   /** Current Pomodoro work-phase length (minutes), used to compute target. */
   workMinutes: number;
+  /** Where the work-phase length comes from: "app" = fixed workMinutes (task
+   * spans multiple pomodoros); "task" = the task's own duration is the work
+   * block (one block per task). */
+  workTimeSource: "app" | "task";
   /** Push the recomputed target up to useTimer; null clears it. */
   onTargetChange: (target: number | null) => void;
+  /** Override the timer's work-phase length with the task duration (task mode),
+   * or null to use the app's Work setting. */
+  onWorkMinutesOverride: (minutes: number | null) => void;
   /** Reset the per-task pomodoro counter — called only when the selected
    * task itself changes, not on workMinutes recalcs. */
   onResetProgress: () => void;
@@ -25,7 +32,7 @@ type Props = {
   target: number | null;
 };
 
-export function BusyBeeActiveTask({ workMinutes, onTargetChange, onResetProgress, progress, target }: Props) {
+export function BusyBeeActiveTask({ workMinutes, workTimeSource, onTargetChange, onWorkMinutesOverride, onResetProgress, progress, target }: Props) {
   const { status } = useBusyBeeStatus();
   const [activeId, setActiveId] = useActiveTaskId();
   const { card, error, loading } = useTaskCard(activeId);
@@ -44,10 +51,24 @@ export function BusyBeeActiveTask({ workMinutes, onTargetChange, onResetProgress
     }
     if (!card || !card.duration_minutes || workMinutes <= 0) {
       onTargetChange(null);
+      onWorkMinutesOverride(null);
       return;
     }
-    onTargetChange(Math.max(1, Math.ceil(card.duration_minutes / workMinutes)));
-  }, [card, workMinutes, onTargetChange, onResetProgress]);
+    if (workTimeSource === "task") {
+      // Work time follows the task: the whole task is one work block, so the
+      // work phase runs for the task's duration and the target is a single 🍅.
+      onWorkMinutesOverride(card.duration_minutes);
+      onTargetChange(1);
+    } else {
+      // App setting: fixed-length pomodoros; the task spans as many as needed.
+      onWorkMinutesOverride(null);
+      onTargetChange(Math.max(1, Math.ceil(card.duration_minutes / workMinutes)));
+    }
+  }, [card, workMinutes, workTimeSource, onTargetChange, onWorkMinutesOverride, onResetProgress]);
+
+  // Clear the work-minutes override when this banner unmounts (e.g. the user
+  // turns off "Show BusyBee task") so a stale task duration can't linger.
+  useEffect(() => () => onWorkMinutesOverride(null), [onWorkMinutesOverride]);
 
   // Hide the banner entirely when BusyBee isn't connected — the Settings
   // panel is where you onboard, no need to nag from the main screen.

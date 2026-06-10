@@ -54,6 +54,13 @@ export function Settings({ settings, onSave, onClose }: Props) {
     setLocal(prev => ({ ...prev, showBusyBeeTask: !prev.showBusyBeeTask }));
   };
 
+  const toggleWorkTimeSource = () => {
+    setLocal(prev => ({
+      ...prev,
+      workTimeSource: prev.workTimeSource === "task" ? "app" : "task",
+    }));
+  };
+
   const handleSave = () => {
     onSave(local);
     onClose();
@@ -201,22 +208,44 @@ export function Settings({ settings, onSave, onClose }: Props) {
           </div>
         </div>
 
-        <div className="setting-row">
-          <span className="setting-label">Show BusyBee task</span>
-          <div className="toggle-wrap">
-            <button
-              className="toggle"
-              role="switch"
-              aria-checked={local.showBusyBeeTask}
-              onClick={toggleShowBusyBeeTask}
-              title="Show the BusyBee task banner above the timer"
-            >
-              <div className="toggle-thumb" />
-            </button>
-          </div>
-        </div>
+        {/* ── BusyBee section — visually separated from the timer settings ── */}
+        <div className="settings-section settings-section--bb">
+          <div className="settings-section__title">BusyBee</div>
 
-        <BusyBeeSettings />
+          <div className="setting-row">
+            <span className="setting-label">Show BusyBee task</span>
+            <div className="toggle-wrap">
+              <button
+                className="toggle"
+                role="switch"
+                aria-checked={local.showBusyBeeTask}
+                onClick={toggleShowBusyBeeTask}
+                title="Show the BusyBee task banner above the timer"
+              >
+                <div className="toggle-thumb" />
+              </button>
+            </div>
+          </div>
+
+          <div className="setting-row">
+            <span className="setting-label">Work time</span>
+            <div className="toggle-wrap">
+              <button
+                className="theme-pill"
+                onClick={toggleWorkTimeSource}
+                title={
+                  local.workTimeSource === "task"
+                    ? "Work duration follows the selected BusyBee task"
+                    : "Work duration uses the app's Work setting above"
+                }
+              >
+                {local.workTimeSource === "task" ? "From task" : "App setting"}
+              </button>
+            </div>
+          </div>
+
+          <BusyBeeSettings />
+        </div>
       </div>
     </div>
   );

@@ -52,7 +52,6 @@ export function BusyBeeSettings({ onConnected }: Props) {
 
   return (
     <div className="bb-settings">
-      <div className="bb-settings__header">BusyBee</div>
       {loading ? (
         <div className="bb-settings__hint">Checking connection…</div>
       ) : isConnected ? (

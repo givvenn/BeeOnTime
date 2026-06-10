@@ -338,7 +338,11 @@ pub async fn bb_list_open_tasks(
     limit: Option<i64>,
 ) -> Result<Vec<TaskSummary>, BusyBeeError> {
     let (url, pat) = fetch_creds(&app, &state).await?;
-    let take = limit.unwrap_or(20).clamp(1, 50);
+    // Fetch a generous slice per status: a busy account can have dozens of open
+    // tasks, and a small limit combined with the server's sort used to hide
+    // recently-created ones entirely. The picker is searchable, so over-fetching
+    // is cheap.
+    let take = limit.unwrap_or(100).clamp(1, 200);
     let mut out: Vec<TaskSummary> = Vec::new();
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
     for status in ["in_progress", "todo"] {

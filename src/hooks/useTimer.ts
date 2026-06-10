@@ -4,6 +4,11 @@ export type Phase = "idle" | "work" | "break" | "longBreak";
 
 export type Theme = "dark" | "light";
 
+/** Where the work-phase length comes from:
+ *  - "app":  the manual Work setting below (classic Pomodoro).
+ *  - "task": the active BusyBee task's own duration (one work block = task). */
+export type WorkTimeSource = "app" | "task";
+
 export interface TimerSettings {
   workMinutes: number;
   breakMinutes: number;
@@ -15,6 +20,7 @@ export interface TimerSettings {
   autoMiniOnBlur: boolean;
   miniOpacity: number; // 0.3–1.0, applies only in mini mode
   showBusyBeeTask: boolean; // show the BusyBee active-task banner above the timer
+  workTimeSource: WorkTimeSource; // "app" = use workMinutes; "task" = use task duration
 }
 
 const DEFAULTS: TimerSettings = {
@@ -28,6 +34,7 @@ const DEFAULTS: TimerSettings = {
   autoMiniOnBlur: true,
   miniOpacity: 0.6,
   showBusyBeeTask: true,
+  workTimeSource: "app",
 };
 
 export function playChime() {
@@ -73,10 +80,10 @@ async function sendNotify(title: string, body: string) {
   } catch { /* not in Tauri env */ }
 }
 
-function phaseDuration(p: Phase, s: TimerSettings): number {
+function phaseDuration(p: Phase, s: TimerSettings, workMinOverride?: number | null): number {
   if (p === "break") return s.breakMinutes * 60;
   if (p === "longBreak") return s.longBreakMinutes * 60;
-  return s.workMinutes * 60;
+  return (workMinOverride ?? s.workMinutes) * 60;
 }
 
 export function useTimer() {
@@ -93,6 +100,12 @@ export function useTimer() {
   const [taskTarget, setTaskTargetState] = useState<number | null>(null);
   const [taskProgress, setTaskProgress] = useState(0);
 
+  // Work-phase length override (minutes). Non-null when "work time from task"
+  // is active and a task with a duration is selected — the work phase then
+  // runs for the task's duration instead of settings.workMinutes. Null = use
+  // the app's Work setting.
+  const [workMinutesOverride, setWorkMinutesOverrideState] = useState<number | null>(null);
+
   // Bumped whenever an external action (e.g. mid-phase saveSettings rebalance)
   // mutates secondsLeft directly — re-runs the ticker effect so it captures
   // the new startSeconds instead of the stale closure value.
@@ -103,13 +116,15 @@ export function useTimer() {
   const settingsRef = useRef(settings);
   const taskTargetRef = useRef(taskTarget);
   const taskProgressRef = useRef(taskProgress);
+  const workMinutesOverrideRef = useRef(workMinutesOverride);
   phaseRef.current = phase;
   sessionsRef.current = sessions;
   settingsRef.current = settings;
   taskTargetRef.current = taskTarget;
   taskProgressRef.current = taskProgress;
+  workMinutesOverrideRef.current = workMinutesOverride;
 
-  const totalSeconds = phaseDuration(phase === "idle" ? "work" : phase, settings);
+  const totalSeconds = phaseDuration(phase === "idle" ? "work" : phase, settings, workMinutesOverride);
   const progress = totalSeconds > 0 ? secondsLeft / totalSeconds : 1;
 
   const transitionPhase = useCallback(() => {
@@ -117,6 +132,7 @@ export function useTimer() {
     const curSessions = sessionsRef.current;
     const s = settingsRef.current;
     const target = taskTargetRef.current;
+    const workOverride = workMinutesOverrideRef.current;
 
     if (cur === "work" || cur === "idle") {
       const next = curSessions + 1;
@@ -124,7 +140,7 @@ export function useTimer() {
       const isLong = next % s.sessionsBeforeLongBreak === 0;
       const nextPhase: Phase = isLong ? "longBreak" : "break";
       setPhase(nextPhase);
-      setSecondsLeft(phaseDuration(nextPhase, s));
+      setSecondsLeft(phaseDuration(nextPhase, s, workOverride));
 
       // Task-aware auto-chain: bump the per-task pomodoro counter and decide
       // whether to keep running automatically or stop and prompt the user.
@@ -153,7 +169,7 @@ export function useTimer() {
       }
     } else {
       setPhase("work");
-      setSecondsLeft(phaseDuration("work", s));
+      setSecondsLeft(phaseDuration("work", s, workOverride));
       sendNotify("Work time!", "Start your focus session.");
       if (target != null && taskProgressRef.current < target) {
         setTimeout(() => setRunning(true), 100);
@@ -201,7 +217,7 @@ export function useTimer() {
     if (phaseRef.current === "idle") {
       const s = settingsRef.current;
       setPhase("work");
-      setSecondsLeft(s.workMinutes * 60);
+      setSecondsLeft(phaseDuration("work", s, workMinutesOverrideRef.current));
     }
     setRunning(true);
   }, []);
@@ -219,7 +235,7 @@ export function useTimer() {
     setRunning(false);
     setPhase("idle");
     setSessions(0);
-    setSecondsLeft(settingsRef.current.workMinutes * 60);
+    setSecondsLeft(phaseDuration("work", settingsRef.current, workMinutesOverrideRef.current));
     // Reset per-task counter but keep the target — same task, fresh attempt.
     setTaskProgress(0);
     taskProgressRef.current = 0;
@@ -241,15 +257,30 @@ export function useTimer() {
     taskProgressRef.current = 0;
   }, []);
 
+  // Override the work-phase length (minutes) — used when "work time from task"
+  // is active. Pass null to fall back to settings.workMinutes. When idle, the
+  // displayed countdown refreshes immediately so the new length is visible
+  // before the user hits Start.
+  const setWorkMinutesOverride = useCallback((n: number | null) => {
+    setWorkMinutesOverrideState(prev => {
+      if (prev === n) return prev;
+      if (phaseRef.current === "idle") {
+        setSecondsLeft((n ?? settingsRef.current.workMinutes) * 60);
+      }
+      return n;
+    });
+  }, []);
+
   const saveSettings = useCallback((s: TimerSettings) => {
     const prev = settingsRef.current;
     const curPhase = phaseRef.current;
     setSettings(s);
     localStorage.setItem("beeontime-settings", JSON.stringify(s));
 
+    const workOverride = workMinutesOverrideRef.current;
     if (curPhase === "idle") {
       // Apply the new work duration to the displayed countdown immediately.
-      setSecondsLeft(s.workMinutes * 60);
+      setSecondsLeft(phaseDuration("work", s, workOverride));
       return;
     }
 
@@ -257,8 +288,8 @@ export function useTimer() {
     // they've already spent in the current phase. E.g. 10 min into a 25-min
     // work phase, then change to 20 min → newRemaining = 20 - 10 = 10 min;
     // display flips to 10:00 instead of staying at the stale 15:00.
-    const prevTotal = phaseDuration(curPhase, prev);
-    const newTotal = phaseDuration(curPhase, s);
+    const prevTotal = phaseDuration(curPhase, prev, workOverride);
+    const newTotal = phaseDuration(curPhase, s, workOverride);
     if (newTotal === prevTotal) return;
 
     const elapsed = prevTotal - secondsLeftRef.current;
@@ -303,5 +334,6 @@ export function useTimer() {
     taskProgress,
     setTaskTarget,
     resetTaskProgress,
+    setWorkMinutesOverride,
   };
 }
